@@ -6,6 +6,7 @@
 from pyspider.libs.base_handler import *
 from datetime import datetime
 import json, re, urlparse
+
 # db_tmall.py 的最后一行连接数据库
 import db_tmall
 
@@ -20,7 +21,7 @@ class Handler(BaseHandler):
             'Connection': 'keep-alive',
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.118 Safari/537.36',
         },
-        'timeout': 100,
+        'timeout': 20,
     }
 
 
