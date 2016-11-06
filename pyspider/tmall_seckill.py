@@ -5,8 +5,7 @@
 
 from pyspider.libs.base_handler import *
 from datetime import datetime
-import json
-import re
+import json, re, urlparse
 # db_tmall.py 的最后一行连接数据库
 import db_tmall
 
@@ -58,33 +57,29 @@ class Handler(BaseHandler):
             self.crawl('https://' + id_act, callback=self.index_page, age=1200, save={'id_act': id_act})
 
         # 秒杀商品，模式 1
-        if 'data-mod-name="mui/zebra-act-ms-240x240/index-pc" data-config="' in response.text:
+        if response.doc('.zebra-act-ms-240x240'):
             n = db_tmall.update_where('tmall_act', {'has_seckill': 1}, id_act=id_act_current)
 
-            json_data = json_decode(response.doc('.J_data').text())
-            for j_item in json_data:
-                if json_data and 'items' in j_item:
-                    for each_item in j_item['items']:
-                        itemId = each_item['itemId']
-                        miaosha_time = each_item['belongTab'] if 'belongTab' in each_item else ''
-                        if not itemId:
-                            if each_item['itemUrl']:
-                                url_p = urlparse.urlparse('http:' + each_item['itemUrl'])
-                                query = urlparse.parse_qs(url_p.query)
-                                if 'id' in query:
-                                    itemId = query['id'][0]
-                        if not itemId:
-                            if each_item['itemUrlPc'] and 'campaign' in each_item['itemUrlPc']:
-                                url_p = urlparse.urlparse('http:' + each_item['itemUrlPc'])
-                                itemId = url_p.hostname + url_p.path + '?time=' + miaosha_time.replace(' ', '_')
+            seckill_data = response.doc('.zebra-act-ms-240x240').attr('data-config')
+            ar_seckill = json.loads(seckill_data)
+
+            for each_group in ar_seckill:
+                if 'items' in each_group:
+                    for each_item in each_group['items']:
+
+                        miaosha_time = each_item['secKillTime'] if 'secKillTime' in each_item else ''
+                        url_p = urlparse.urlparse('http:' + each_item['itemUrl'])
+                        query = urlparse.parse_qs(url_p.query)
+                        if 'id' in query:
+                            itemId = query['id'][0]
 
                         if itemId:
                             print itemId
                             ar_item = {'itemId': itemId, 'itemTitle': each_item['itemTitle'], 
-    'belongTab': miaosha_time, 'itemNum': each_item['itemNum'].replace(',', ''), 
+    'secKillTime': miaosha_time, 'itemNum': each_item['itemNum'].replace(',', ''), 
     'itemSecKillPrice': each_item['itemSecKillPrice'], 'itemTagPrice': each_item['itemTagPrice'], 
     'brandLogo': each_item['brandLogo'], 'itemImg': each_item['itemImg'], 'id_act': id_act_current, 'created_on': datetime_now}
-                            n_insert = db_tmall.insert('tmall_miaosha', **ar_item)
+                            n_insert = db_tmall.insert('tmall_item', **ar_item)
 
 
 
