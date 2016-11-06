@@ -31,42 +31,36 @@ class Handler(BaseHandler):
         id_act = '1111.tmall.com'
         # 会场入口页
         self.crawl(url_index, callback=self.index_page, age=600, priority=9, auto_recrawl=True, force_update=True, save={'id_act': id_act})
-        # 会场入口页手机版
-        self.crawl(url_index + '?spm=', callback=self.index_page, age=1200, save={'id_act': id_act}, headers={'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 6_0 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A5376e Safari/8536.25'})
-        # 某个手机页面的json 数据源，具体哪个页面我忘了
-        #self.crawl('/', callback=self.ald_05403, age=600, priority=9, auto_recrawl=True, force_update=True)
 
 
     @catch_status_code_error
     def index_page(self, response):
+
+        # 当前会场页面存入数据库
         id_act_current = response.save['id_act']
         datetime_now = datetime.now()
         title = response.doc('title').text().replace(u'-上天猫，就够了', '')
         act_item = {'id_act': id_act_current, 'created_on': datetime_now, 'title': title}
         print act_item
+
         n_insert = db_tmall.insert('tmall_act', **act_item)
 
+        # 采集页面内所有会场 url
         ar_act = {}
-        ar_m = re.finditer(u'([a-z]+\.tmall\.com/wow/act/(.+?))\?', response.text.replace('&#x2F;', '/'))
+        ar_m = re.finditer(u'([a-z]+\.tmall\.com/wow/act/16495/(.+?))\?', response.text.replace('&#x2F;', '/'))
         for m in ar_m:
             ar_act[m.group(1)] = m.group(1)
-        ar_m = re.finditer(u'([a-z]+\.tmall\.com/wow/[^\?]*/act/(.+?))\?', response.text.replace('&#x2F;', '/'))
-        for m in ar_m:
-            ar_act[m.group(1)] = m.group(1)
+        print ar_act
 
         for id_act in ar_act:
             if '"' in id_act:
                 id_act = id_act[:id_act.find('"')]
             self.crawl('https://' + id_act, callback=self.index_page, age=1200, save={'id_act': id_act})
-            #手机版
-            self.crawl('https://' + id_act + '?spm=', callback=self.index_page, age=1200, save={'id_act': id_act}, headers={'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 6_0 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A5376e Safari/8536.25'})
 
-        if response.doc('.J_data'):
-            if '?' in response.orig_url:
-                ar_j = {'wap_has_j': 1}
-            else:
-                ar_j = {'has_j': 1}
-            n = db_tmall.update_where('tmall_act', ar_j, id_act=id_act_current)
+        # 秒杀商品，模式 1
+        if 'data-mod-name="mui/zebra-act-ms-240x240/index-pc" data-config="' in response.text:
+            n = db_tmall.update_where('tmall_act', {'has_seckill': 1}, id_act=id_act_current)
+
             json_data = json_decode(response.doc('.J_data').text())
             for j_item in json_data:
                 if json_data and 'items' in j_item:
@@ -92,33 +86,6 @@ class Handler(BaseHandler):
     'brandLogo': each_item['brandLogo'], 'itemImg': each_item['itemImg'], 'id_act': id_act_current, 'created_on': datetime_now}
                             n_insert = db_tmall.insert('tmall_miaosha', **ar_item)
 
-
-    @catch_status_code_error
-    def ald_05403(self, response):
-        time_13 = str(int(time.time() * 1000))
-        date_now = datetime.now().strftime('%Y%m%d')
-        url_05403 = 'https://ald.taobao.com/recommend.htm?appID=05403&date=' + date_now + '&callback=_DLP_' + time_13
-        self.crawl(url_05403, callback=self.ald_page, age=1200)
-
-
-    @catch_status_code_error
-    def ald_page(self, response):
-        id_act = fn_cut('://', '&callback', response.orig_url)
-        json_data = json_decode(response.text, is_jsonp=True)
-        if 'data' in json_data:
-            for each_item in json_data['data']:
-                if 'itemUrl' in each_item:
-                    url_p = urlparse.urlparse(each_item['itemUrl'])
-                    query = urlparse.parse_qs(url_p.query)
-                    if 'id' in query:
-                        itemId = query['id'][0]
-                        miaosha_time = time.strftime('%Y-%m-%d %H:%M:%S', time.strptime(each_item['startTime'], '%Y%m%d%H%M%S')) if 'startTime' in each_item else ''
-                        print itemId
-                        ar_item = {'itemId': itemId, 'itemTitle': each_item['title'], 
-                'belongTab': miaosha_time, 'itemNum': 0, 'itemSecKillPrice': each_item['wapFinalPrice'], 
-                'itemTagPrice': each_item['price'], 'brandLogo': '', 'itemImg': each_item['pictUrl'], 
-                'id_act': id_act, 'created_on': datetime.now()}
-                        n_insert = db_tmall.insert('tmall_miaosha', **ar_item)
 
 
 #解析json 字符串，is_jsonp 出去外包括号
