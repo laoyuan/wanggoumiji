@@ -14,7 +14,7 @@ DROP TABLE IF EXISTS `tmall_item`;
 CREATE TABLE IF NOT EXISTS `tmall_item` (
   `itemId` varchar(255) NOT NULL,
   `itemTitle` varchar(255) NOT NULL,
-  `belongTab` datetime NOT NULL,
+  `secKillTime` datetime NOT NULL,
   `itemNum` int(11) NOT NULL,
   `itemSecKillPrice` float NOT NULL,
   `itemTagPrice` float NOT NULL,
