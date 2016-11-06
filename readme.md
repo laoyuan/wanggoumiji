@@ -5,9 +5,19 @@
 
 命令行窗口一：
 ```
+cd ~
+
 brew install python
 sudo pip install --upgrade pip
 sudo pip install pyspider
+sudo pip install --allow-all-external mysql-connector-python
+sudo pip install --allow-external mysql-connector-python mysql-connector-python
+
+# 安装 mysql.connector，pip 不支持了
+git clone https://github.com/mysql/mysql-connector-python.git
+cd mysql-connector-python
+python ./setup.py build
+sudo python ./setup.py install
 
 cd ~
 mkdir wgmj
