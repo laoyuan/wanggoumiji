@@ -1,5 +1,5 @@
 ## Setup
-
+```
 DROP TABLE IF EXISTS `tmall_act`;
 CREATE TABLE IF NOT EXISTS `tmall_act` (
   `id_act` varchar(100) NOT NULL,
@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS `tmall_item` (
   `created_on` datetime NOT NULL,
   PRIMARY KEY (`itemId`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+```
 
 ## Devlog
 
