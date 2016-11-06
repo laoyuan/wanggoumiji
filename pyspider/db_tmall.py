@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# 最后一行连接数据库
+# 修改最后一行连接数据库
 
 __author__ = 'Michael Liao'
 
