@@ -5,6 +5,7 @@
 
 from pyspider.libs.base_handler import *
 from datetime import datetime
+from HTMLParser import HTMLParser
 import json, re, urlparse
 
 # db_tmall.py 的最后一行连接数据库
@@ -27,39 +28,93 @@ class Handler(BaseHandler):
 
     @every(minutes=60)
     def on_start(self):
-        url_index = 'https://1111.tmall.com/?wh_act_nativebar=2&wh_main=true'
-        id_act = '1111.tmall.com'
+
         # 会场入口页
-        self.crawl(url_index, callback=self.index_page, age=600, priority=9, auto_recrawl=True, force_update=True, save={'id_act': id_act})
+        url_index = 'https://1111.tmall.com/?wh_act_nativebar=2&wh_main=true'
+        # pass to next mathod
+        save = {'url': '1111.tmall.com'};
+
+        self.crawl(url_index, callback=self.index_page, age=600, priority=9, auto_recrawl=True, force_update=True, save=save)
 
 
     @catch_status_code_error
     def index_page(self, response):
 
-        # 当前会场页面存入数据库
-        id_act_current = response.save['id_act']
-        datetime_now = datetime.now()
+        # unescape html entity
+        html_text = HTMLParser().unescape(response.text)
+
+        # 当前会场页数据入库
+
+        url_current = response.save['url'];
         title = response.doc('title').text().replace(u'-上天猫，就够了', '')
-        act_item = {'id_act': id_act_current, 'created_on': datetime_now, 'title': title}
+        datetime_now = datetime.now()
+
+        act_item = {
+            'url': url_current, 
+            'has_seckill': 0,
+            'title': title,
+            'created_at': datetime_now, 
+            'updated_at': datetime_now, 
+        }
+
         print act_item
 
-        n_insert = db_tmall.insert('tmall_act', **act_item)
+        n_insert = db_tmall.insert('tmall_acts', **act_item)
 
-        # 采集页面内所有会场 url
-        ar_act = {}
-        ar_m = re.finditer(u'([a-z]+\.tmall\.com/wow/act/16495/(.+?))\?', response.text.replace('&#x2F;', '/'))
-        for m in ar_m:
-            ar_act[m.group(1)] = m.group(1)
-        print ar_act
 
-        for id_act in ar_act:
-            if '"' in id_act:
-                id_act = id_act[:id_act.find('"')]
-            self.crawl('https://' + id_act, callback=self.index_page, age=1200, save={'id_act': id_act})
+        # 抓取页面内所有会场
+
+        all_act = {}
+        matches = re.finditer(u'pages.tmall\.com/wow/act/16495/[a-zA-Z0-9_\-\.]+', html_text)
+        for m in matches:
+            all_act[m.group(0)] = m.group(0)
+
+        print all_act
+
+        for url in all_act:
+            if '"' in url:
+                url = url[:url.find('"')]
+            self.crawl('https://' + url, callback=self.index_page, age=1200, save={'url': url})
+
+
+        # 抽取页面内所有店铺 shop 及活动页 campaign 入库, type = 1
+
+        all_shop = {}
+        all_campaign = {}
+        matches = re.finditer(u'([a-z0-9]+)\.tmall\.(com|hk)/campaign\-([a-zA-Z0-9_\-\.]+)', html_text)
+        for m in matches:
+            subdomain = m.group(1)
+            campaign = subdomain + '.tmall.com/campaign-' + m.group(3)
+
+            all_shop[subdomain] = subdomain
+            all_campaign[campaign] = campaign
+
+            subdomain_item = {
+                'subdomain': subdomain, 
+                'type': 1,
+                'created_at': datetime_now, 
+                'updated_at': datetime_now, 
+            }
+            n_insert = db_tmall.insert('tmall_shops', **subdomain_item)
+            n_update = db_tmall.update('update tmall_shops set type=? where subdomain=? and type<?', 1, subdomain, 1)
+
+            campaign_item = {
+                'campaign': campaign, 
+                'type': 1,
+                'subdomain': subdomain, 
+                'created_at': datetime_now, 
+                'updated_at': datetime_now, 
+            }
+            n_insert = db_tmall.insert('tmall_campaigns', **campaign_item)
+            n_update = db_tmall.update('update tmall_campaigns set type=? where campaign=? and type<?', 1, campaign, 1)
+
+        print all_shop
+        print all_campaign
+
 
         # 秒杀商品，模式 1
         if response.doc('.zebra-act-ms-240x240'):
-            n = db_tmall.update_where('tmall_act', {'has_seckill': 1}, id_act=id_act_current)
+            n = db_tmall.update_where('tmall_acts', {'has_seckill': 1, 'updated_at': datetime_now}, url=url_current)
 
             seckill_data = response.doc('.zebra-act-ms-240x240').attr('data-config')
             ar_seckill = json.loads(seckill_data)
@@ -79,7 +134,7 @@ class Handler(BaseHandler):
                             ar_item = {'itemId': itemId, 'itemTitle': each_item['itemTitle'], 
     'secKillTime': miaosha_time, 'itemNum': each_item['itemNum'].replace(',', ''), 
     'itemSecKillPrice': each_item['itemSecKillPrice'], 'itemTagPrice': each_item['itemTagPrice'], 
-    'brandLogo': each_item['brandLogo'], 'itemImg': each_item['itemImg'], 'id_act': id_act_current, 'created_on': datetime_now}
+    'brandLogo': each_item['brandLogo'], 'itemImg': each_item['itemImg'], 'url': url_current, 'created_on': datetime_now}
                             n_insert = db_tmall.insert('tmall_item', **ar_item)
 
 

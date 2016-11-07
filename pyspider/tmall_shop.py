@@ -28,26 +28,39 @@ class Handler(BaseHandler):
     # 动态抓没有 userId 的店铺
     @catch_status_code_error
     def shop_index(self, response): 
-        ar = db_tmall.select('select * from `tmall_shop_url` where userId = ""')
+        ar = db_tmall.select('select * from `tmall_shop_url` where userID = "" and noshop < 3 limit 0,100')
 
         for i in range(len(ar)):
-            self.crawl('http://' + ar[i]['sub'] + '.tmall.com', fetch_type='js', callback=self.shop_page, save=ar[i], priority=9, age=600, force_update=True)
+            self.crawl('http://' + ar[i]['subdomain'] + '.tmall.com', fetch_type='js', callback=self.shop_page, save=ar[i], priority=9, age=600, force_update=True)
         
     # 抓天猫店铺首页
     @catch_status_code_error
     def shop_page(self, response):
-        sub = response.save['sub']
+        id = response.save['id']
         shopID = fn_cut('shopId: "', '"', response.text)
         userID = fn_cut('sellerId: "', '"', response.text)
+        datetime_now = datetime.now()
+
         if shopID != '':
-            print sub, shopID
+            print id, shopID
             shopName = response.doc('.slogo-shopname').text()
             url_p = urlparse.urlparse(response.url)
             shopDomain = url_p.hostname
-            ar_item = {'shopID': shopID, 'userID': userID, 'shopName': shopName, 'shopDomain': shopDomain}
-            n_update = db_tmall.update_where('tmall_shop_url', ar_item, sub=sub)
+            ar_item = {
+                'noShop': 0,
+                'userID': userID, 
+                'shopID': shopID, 
+                'shopName': shopName, 
+                'shopDomain': shopDomain, 
+                'updated_on': datetime_now
+            }
+            n_update = db_tmall.update_where('tmall_shop_url', ar_item, id=id)
+            if n_update == 0:
+                print 'update fail'
         else:
-            print response.headers
+            if response.doc('.error-notice-hd').text() == u'没有找到相应的店铺信息':
+                n_update = db_tmall.update_where('tmall_shop_url', {'noshop': response.save['noshop'] + 1, 'updated_on': datetime_now}, id=id)
+            print [response.status_code, len(response.content), response.url]
 
 
 def fn_cut(start, end, str):

@@ -1,6 +1,5 @@
 ## Setup
 ```
-DROP TABLE IF EXISTS `tmall.tmall_act`;
 CREATE TABLE IF NOT EXISTS `tmall.tmall_act` (
   `id_act` varchar(100) NOT NULL,
   `has_seckill` int(11) NOT NULL DEFAULT '0',
@@ -10,7 +9,6 @@ CREATE TABLE IF NOT EXISTS `tmall.tmall_act` (
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
 
-DROP TABLE IF EXISTS `tmall.tmall_item`;
 CREATE TABLE IF NOT EXISTS `tmall.tmall_item` (
   `itemId` varchar(255) NOT NULL,
   `itemTitle` varchar(255) NOT NULL,
