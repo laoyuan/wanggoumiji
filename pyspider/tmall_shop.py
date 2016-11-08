@@ -4,6 +4,7 @@
 from pyspider.libs.base_handler import *
 from datetime import datetime
 from pyquery import PyQuery
+from HTMLParser import HTMLParser
 import json, re, urlparse
 
 # db_tmall.py 的最后一行连接数据库
@@ -29,7 +30,7 @@ class Handler(BaseHandler):
     # 动态抓没有 userId 的店铺
     @catch_status_code_error
     def shop_index(self, response): 
-        shops = db_tmall.select('select * from `tmall_shops` where type>0 and userId=? and noShop<? limit 0,100', '', 3)
+        shops = db_tmall.select('select id, subdomain, type, noShop from `tmall_shops` where type>0 and userId=? and noShop<? limit 0,100', '', 3)
 
         for i in range(len(shops)):
             url_shop = 'https://' + shops[i]['subdomain'] + '.tmall.com'
@@ -113,7 +114,7 @@ class Handler(BaseHandler):
                 print 'update fail'
 
         else:
-            if response.doc('.error-notice-hd').text() == u'没有找到相应的店铺信息':
+            if response.doc('.error-notice-hd') and response.doc('.error-notice-hd').text() == u'没有找到相应的店铺信息':
                 noShop = response.save['noShop'] + 1,
                 update_item = {
                     'noShop': noShop, 
@@ -170,7 +171,7 @@ class Handler(BaseHandler):
                     'itemSecKillPrice': 0,
                     'itemTagPrice': 0,
                     'shop_id': 0,
-                    'act_id': act_id,
+                    'act_id': '',
                     'created_at': datetime_now, 
                     'updated_at': datetime_now, 
                 }
