@@ -8,9 +8,8 @@ from datetime import datetime
 from HTMLParser import HTMLParser
 import json, re, urlparse
 
-# db_tmall.py 的最后一行连接数据库
+# 修改 db_tmall.py 最后一行连接数据库，每次修改需要重启 pyspider
 import db_tmall
-
 
 
 class Handler(BaseHandler):
@@ -24,7 +23,6 @@ class Handler(BaseHandler):
         },
         'timeout': 20,
     }
-
 
     @every(minutes=60)
     def on_start(self):
@@ -51,7 +49,6 @@ class Handler(BaseHandler):
 
         act_item = {
             'act_url': url_current, 
-            'has_seckill': 0,
             'title': title,
             'created_at': datetime_now, 
             'updated_at': datetime_now, 
@@ -62,6 +59,8 @@ class Handler(BaseHandler):
         select_item = db_tmall.select_one('select * from `tmall_acts` where act_url=?', url_current)
         act_id = select_item['id'] if 'id' in select_item else 0
         act_item['id'] = act_id
+
+        n_update = db_tmall.update('update `tmall_acts` set updated_at=? where id=?', datetime_now, act_id)
 
         print act_item
 
@@ -78,7 +77,7 @@ class Handler(BaseHandler):
             self.crawl('https://' + act_url, callback=self.index_page, age=1200, save={'act_url': act_url})
 
 
-        # 抽取页面内所有店铺 shop、活动页 campaign、商品 itme 入库, type = 1
+        # 抽取页面内所有店铺 shop、活动页 campaign, type = 8
 
         all_shop = {}
         all_campaign = {}
@@ -91,27 +90,44 @@ class Handler(BaseHandler):
             all_shop[subdomain] = subdomain
             all_campaign[campaign] = campaign
 
-            subdomain_item = {
+            shop_item = {
                 'subdomain': subdomain, 
-                'type': 1,
+                'type': 8,
+                'userId': '', 
+                'shopId': '', 
+                'wtId': '',
+                'shopName': '', 
+                'shopDomain': '', 
+                'userRate': '',
+                'xid': '',
+                'shopAge': '',
+                'city': '',
+                'score1': 0,
+                'score2': 0,
+                'score3': 0,
+                'offset1': 0,
+                'offset2': 0,
+                'offset3': 0,
                 'created_at': datetime_now, 
                 'updated_at': datetime_now, 
             }
 
-            n_insert = db_tmall.insert('tmall_shops', **subdomain_item)
-            n_update = db_tmall.update('update tmall_shops set type=? where subdomain=? and type<?', 1, subdomain, 1)
+            n_insert = db_tmall.insert('tmall_shops', **shop_item)
+            n_update = db_tmall.update('update `tmall_shops` set type=8 where subdomain=? and type<8', subdomain)
 
             campaign_item = {
                 'campaign': campaign, 
-                'type': 1,
+                'type': 8,
                 'subdomain': subdomain, 
                 'created_at': datetime_now, 
                 'updated_at': datetime_now, 
             }
+
             n_insert = db_tmall.insert('tmall_campaigns', **campaign_item)
-            n_update = db_tmall.update('update tmall_campaigns set type=? where campaign=? and type<?', 1, campaign, 1)
         
-        # 抽取页面所有商品入库，type=1 会场页商品，type=9 秒杀商品
+
+        # 抽取页面所有商品，type=8 会场页商品，type=9 是秒杀商品
+
         all_item = {}
         matches = re.finditer(u'detail\.tmall\.(com|hk)/([a-zA-Z0-9_\-\.\?&=]+)', html_text)
         for m in matches:
@@ -123,7 +139,7 @@ class Handler(BaseHandler):
 
                 item = {
                     'itemId': itemId, 
-                    'type': 1,
+                    'type': 8,
                     'itemTitle': '',
                     'secKillTime': '',
                     'itemNum': 0,
@@ -140,46 +156,6 @@ class Handler(BaseHandler):
         print all_shop
         print all_campaign
         print all_item
-
-
-        # 秒杀商品，模式 1
-        if response.doc('.zebra-act-ms-240x240'):
-            n = db_tmall.update_where('tmall_acts', {'has_seckill': 1, 'updated_at': datetime_now}, act_url=url_current)
-
-            seckill_data = response.doc('.zebra-act-ms-240x240').attr('data-config')
-            all_seckill = json.loads(seckill_data)
-
-            for each_group in all_seckill:
-                if 'items' in each_group:
-                    for each_item in each_group['items']:
-
-                        miaosha_time = each_item['secKillTime'] if 'secKillTime' in each_item else ''
-                        url_p = urlparse.urlparse('http:' + each_item['itemUrl'])
-                        query = urlparse.parse_qs(url_p.query)
-                        if 'id' in query:
-                            itemId = query['id'][0]
-
-                        if itemId:
-                            print itemId
-                            item = {
-                                'itemId': itemId, 
-                                'type': 9,
-                                'itemTitle': each_item['itemTitle'], 
-                                'secKillTime': miaosha_time, 
-                                'itemNum': each_item['itemNum'].replace(',', ''), 
-                                'itemSecKillPrice': each_item['itemSecKillPrice'], 
-                                'itemTagPrice': each_item['itemTagPrice'], 
-                                'itemImg': each_item['itemImg'],
-                                'shop_id': 0, 
-                                'act_id': act_id, 
-                                'created_at': datetime_now, 
-                                'updated_at': datetime_now,
-                            }
-                            n_insert = db_tmall.insert('tmall_items', **item)
-                            if n_insert == 0:
-                                item.pop('created_at')
-                                n_update = db_tmall.update_where('tmall_items', item, itemId=itemId)
-
 
 
 #解析json 字符串，is_jsonp 出去外包括号

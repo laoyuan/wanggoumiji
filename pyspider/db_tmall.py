@@ -10,6 +10,9 @@ Database operation module.
 
 import time, uuid, functools, threading, logging
 
+# print SQL query or not
+log = False
+
 # Dict object:
 
 class Dict(dict):
@@ -86,9 +89,11 @@ class _LasyConnection(object):
         self.connection = None
 
     def cursor(self):
+        global log
         if self.connection is None:
             connection = db_engine.connect()
-            logging.info('open connection <%s>...' % hex(id(connection)))
+            if log:
+                logging.info('open connection <%s>...' % hex(id(connection)))
             self.connection = connection
         return self.connection.cursor()
 
@@ -99,16 +104,20 @@ class _LasyConnection(object):
         self.connection.rollback()
 
     def cleanup(self):
+        global log
         if self.connection:
             connection = self.connection
             self.connection = None
-            logging.info('close connection <%s>...' % hex(id(connection)))
+            if log:
+                logging.info('close connection <%s>...' % hex(id(connection)))
             connection.close()
 
 class _DbCtx(threading.local):
     '''
     Thread local object that holds connection info.
     '''
+    global log
+
     def __init__(self):
         self.connection = None
         self.transactions = 0
@@ -117,7 +126,8 @@ class _DbCtx(threading.local):
         return not self.connection is None
 
     def init(self):
-        logging.info('open lazy connection...')
+        if log:
+            logging.info('open lazy connection...')
         self.connection = _LasyConnection()
         self.transactions = 0
 
@@ -318,10 +328,11 @@ def with_transaction(func):
 @with_connection
 def _select(sql, first, *args):
     ' execute select SQL and return unique result or list results.'
-    global _db_ctx
+    global _db_ctx, log
     cursor = None
     sql = sql.replace('?', '%s')
-    logging.info('SQL: %s, ARGS: %s' % (sql, args))
+    if log:
+        logging.info('SQL: %s, ARGS: %s' % (sql, args))
     try:
         cursor = _db_ctx.connection.cursor()
         cursor.execute(sql, args)
@@ -339,17 +350,19 @@ def _select(sql, first, *args):
 
 @with_connection
 def _update(sql, *args):
-    global _db_ctx
+    global _db_ctx, log
     cursor = None
     sql = sql.replace('?', '%s')
-    logging.info('SQL: %s, ARGS: %s' % (sql, args))
+    if log:
+        logging.info('SQL: %s, ARGS: %s' % (sql, args))
     try:
         cursor = _db_ctx.connection.cursor()
         cursor.execute(sql, args)
         r = cursor.rowcount
         if _db_ctx.transactions==0:
             # no transaction enviroment:
-            logging.info('auto commit')
+            if log:
+                logging.info('auto commit')
             _db_ctx.connection.commit()
         return r
     finally:
@@ -488,5 +501,6 @@ def update(sql, *args):
     '''
     return _update(sql, *args)
 
-create_engine(user='root', password='your_pass', database='tmall', host='127.0.0.1', port=3306)
 
+# edit this to your own MySQL
+create_engine(user='root', password='your_pass', database='tmall', host='127.0.0.1', port=3306)
