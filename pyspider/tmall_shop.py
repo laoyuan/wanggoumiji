@@ -2,7 +2,8 @@
 # -*- encoding: utf-8 -*-
 
 from pyspider.libs.base_handler import *
-from datetime import datetime
+
+from datetime import datetime, timedelta
 from pyquery import PyQuery
 from HTMLParser import HTMLParser
 import json, re, urlparse
@@ -25,17 +26,17 @@ class Handler(BaseHandler):
     # on_start 不支持动态
     @every(minutes=60)
     def on_start(self):
-        self.crawl('', callback=self.shop_index, age=30, auto_recrawl=True, force_update=True)
+        self.crawl('://', callback=self.shop_index, age=60, auto_recrawl=True, force_update=True)
 
-    # 动态抓没有 userId 的店铺
-    @catch_status_code_error
+
+    # 动态抓店铺，没有 userId 的
     def shop_index(self, response): 
         shops = db_tmall.select('select id, subdomain, type, noShop from `tmall_shops` where type>0 and userId=? and noShop<? limit 0,100', '', 3)
+        for shop in shops:
+            url_shop = 'https://' + shop['subdomain'] + '.tmall.com'
+            self.crawl(url_shop, callback=self.shop_page, age=600, force_update=True, max_redirects=10, save=shop)
 
-        for i in range(len(shops)):
-            url_shop = 'https://' + shops[i]['subdomain'] + '.tmall.com'
-            self.crawl(url_shop, callback=self.shop_page, fetch_type='js', save=shops[i], priority=9, age=600, force_update=True, load_images=False)
-        
+
     # 抓天猫店铺首页抽取数据，如果店铺不存在 noShop + 1
     @catch_status_code_error
     def shop_page(self, response):
@@ -111,11 +112,11 @@ class Handler(BaseHandler):
 
             n_update = db_tmall.update_where('tmall_shops', shop_item, id=id)
             if n_update == 0:
-                print 'update fail'
+                print 'shop update fail'
 
         else:
             if response.doc('.error-notice-hd') and response.doc('.error-notice-hd').text() == u'没有找到相应的店铺信息':
-                noShop = response.save['noShop'] + 1,
+                noShop = response.save['noShop'] + 1
                 update_item = {
                     'noShop': noShop, 
                     'updated_at': datetime_now, 
@@ -123,13 +124,13 @@ class Handler(BaseHandler):
 
                 n_update = db_tmall.update_where('tmall_shops', update_item, id=id)
 
-                print 'shop no', id, noShop
+                print 'shop no', response.save['subdomain'], noShop
 
             else:
                 print 'shop fail', id, response.status_code, len(response.content), response.url
 
 
-        # 抽取页面内所有活动页 campaign 入库, type = 2
+        # 抽取页面内所有活动页 campaign 入库, type = 3
 
         html_text = HTMLParser().unescape(response.text)
         all_campaign = {}
@@ -141,17 +142,20 @@ class Handler(BaseHandler):
 
             all_campaign[campaign] = campaign
 
+        for campaign in all_campaign:
             campaign_item = {
                 'campaign': campaign, 
-                'type': 2,
+                'type': 3,
+                'item_num': 0,
                 'subdomain': subdomain, 
+                'crawled_at': 0,
                 'created_at': datetime_now, 
                 'updated_at': datetime_now, 
             }
             n_insert = db_tmall.insert('tmall_campaigns', **campaign_item)
         
 
-        # 抽取页面所有商品入库，type=3
+        # 抽取页面所有商品入库，type = 3
 
         all_item = {}
         matches = re.finditer(u'detail\.tmall\.(com|hk)/([a-zA-Z0-9_\-\.\?&=]+)', html_text)
@@ -162,37 +166,46 @@ class Handler(BaseHandler):
                 itemId = query['id'][0]
                 all_item[itemId] = itemId
 
-                item = {
-                    'itemId': itemId, 
-                    'type': 3,
-                    'itemTitle': '',
-                    'secKillTime': '',
-                    'itemNum': 0,
-                    'itemSecKillPrice': 0,
-                    'itemTagPrice': 0,
-                    'shop_id': 0,
-                    'act_id': '',
-                    'created_at': datetime_now, 
-                    'updated_at': datetime_now, 
-                }
+        for itemId in all_item:
+            item = {
+                'itemId': itemId, 
+                'type': 3,
+                'noItem': 0,
+                'itemNum': 0,
+                'itemSecKillPrice': 0,
+                'itemTagPrice': 0,
+                'shop_id': 0,
+                'act_id': 0,
+                'userId': '',
+                'itemTitle': '',
+                'itemImg': '',
+                'secKillTime': '',
+                'crawled_at': 0,
+                'created_at': datetime_now, 
+                'updated_at': datetime_now, 
+            }
 
-                n_insert = db_tmall.insert('tmall_items', **item)
+            n_insert = db_tmall.insert('tmall_items', **item)
 
         print all_campaign
         print all_item
 
 
-def fn_cut(start, end, str):
-    p1 = 0 if start == '' else str.find(start)
+
+def fn_cut(start, end, s):
+    if not (isinstance(s, str) or isinstance(s, unicode)):
+        return ''
+
+    p1 = 0 if start == '' else s.find(start)
     if p1 == -1:
         return ''
     e1 = p1 + len(start)
 
     if end == '':
-        return str[e1:]
+        return s[e1:]
 
-    p2 = str.find(end, e1)
-    return str[e1:] if p2 == -1 else str[e1: p2]
+    p2 = s.find(end, e1)
+    return s[e1:] if p2 == -1 else s[e1: p2]
 
 
 

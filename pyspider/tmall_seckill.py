@@ -27,145 +27,146 @@ class Handler(BaseHandler):
     @every(minutes=60)
     def on_start(self):
 
-        # 会场入口页
-        url_index = 'https://1111.tmall.com/?wh_act_nativebar=2&wh_main=true'
-        # pass to next mathod
-        save = {'act_url': '1111.tmall.com'};
-
-        self.crawl(url_index, callback=self.index_page, age=600, priority=9, auto_recrawl=True, force_update=True, save=save)
+        # 总会场页
+        url_index = 'https://1111.tmall.com/'
+        self.crawl(url_index, callback=self.index_page, age=600, auto_recrawl=True, force_update=True)
 
 
     @catch_status_code_error
     def index_page(self, response):
+        if response.status_code == 304 and response.error == 'HTTP 304: Not Modified':
+            print 'act 304: Not Modified'
+            return
+
+        all_act = {}
+        datetime_now = datetime.now()
 
         # unescape html entity
         html_text = HTMLParser().unescape(response.text)
 
-        # 当前会场页数据入库
-
-        url_current = response.save['act_url'];
-        title = response.doc('title').text().replace(u'-上天猫，就够了', '')
-        datetime_now = datetime.now()
-
-        act_item = {
-            'act_url': url_current, 
-            'title': title,
-            'created_at': datetime_now, 
-            'updated_at': datetime_now, 
-        }
-
-        n_insert = db_tmall.insert('tmall_acts', **act_item)
-
-        select_item = db_tmall.select_one('select * from `tmall_acts` where act_url=?', url_current)
-        act_id = select_item['id'] if 'id' in select_item else 0
-        act_item['id'] = act_id
-
-        n_update = db_tmall.update('update `tmall_acts` set updated_at=? where id=?', datetime_now, act_id)
-
-        print act_item
-
         # 抓取页面内所有会场
 
-        all_act = {}
         matches = re.finditer(u'pages.tmall\.com/wow/act/16495/[a-zA-Z0-9_\-\.]+', html_text)
         for m in matches:
             all_act[m.group(0)] = m.group(0)
 
-        print all_act
-
         for act_url in all_act:
-            self.crawl('https://' + act_url, callback=self.index_page, age=1200, save={'act_url': act_url})
+            self.crawl('https://' + act_url, callback=self.index_page, age=1200)
 
 
-        # 抽取页面内所有店铺 shop、活动页 campaign, type = 8
+        # 当前会场页数据入库
 
-        all_shop = {}
-        all_campaign = {}
+        act_url = response.orig_url
+        title = response.doc('title').text().replace(u'-上天猫，就够了', '')
 
-        matches = re.finditer(u'([a-z0-9]+)\.tmall\.(com|hk)/campaign\-([a-zA-Z0-9_\-\.]+)', html_text)
-        for m in matches:
-            subdomain = m.group(1)
-            campaign = subdomain + '.tmall.com/campaign-' + m.group(3)
+        act_item = {
+            'act_url': act_url, 
+            'title': title,
+            'crawled_at': datetime_now,
+            'created_at': datetime_now, 
+            'updated_at': datetime_now, 
+        }
 
-            all_shop[subdomain] = subdomain
-            all_campaign[campaign] = campaign
+        update_item = {
+            'crawled_at': datetime_now,
+        }
 
-            shop_item = {
-                'subdomain': subdomain, 
-                'type': 8,
-                'userId': '', 
-                'shopId': '', 
-                'wtId': '',
-                'shopName': '', 
-                'shopDomain': '', 
-                'userRate': '',
-                'xid': '',
-                'shopAge': '',
-                'city': '',
-                'score1': 0,
-                'score2': 0,
-                'score3': 0,
-                'offset1': 0,
-                'offset2': 0,
-                'offset3': 0,
-                'created_at': datetime_now, 
-                'updated_at': datetime_now, 
-            }
+        n_update = db_tmall.update_where('tmall_acts', {'crawled_at': datetime_now}, act_url=act_url)
+        if n_update == 0:
+            n_insert = db_tmall.insert('tmall_acts', **act_item)
 
-            n_insert = db_tmall.insert('tmall_shops', **shop_item)
-            n_update = db_tmall.update('update `tmall_shops` set type=8 where subdomain=? and type<8', subdomain)
-
-            campaign_item = {
-                'campaign': campaign, 
-                'type': 8,
-                'subdomain': subdomain, 
-                'created_at': datetime_now, 
-                'updated_at': datetime_now, 
-            }
-
-            n_insert = db_tmall.insert('tmall_campaigns', **campaign_item)
-        
-
-        # 抽取页面所有商品，type=8 会场页商品，type=9 是秒杀商品
-
-        all_item = {}
-        matches = re.finditer(u'detail\.tmall\.(com|hk)/([a-zA-Z0-9_\-\.\?&=]+)', html_text)
-        for m in matches:
-            url_p = urlparse.urlparse('http:' + m.group(0))
-            query = urlparse.parse_qs(url_p.query)
-            if 'id' in query:
-                itemId = query['id'][0]
-                all_item[itemId] = itemId
-
-                item = {
-                    'itemId': itemId, 
-                    'type': 8,
-                    'itemTitle': '',
-                    'secKillTime': '',
-                    'itemNum': 0,
-                    'itemSecKillPrice': 0,
-                    'itemTagPrice': 0,
-                    'shop_id': 0,
-                    'act_id': act_id,
-                    'created_at': datetime_now, 
-                    'updated_at': datetime_now, 
-                }
-
-                n_insert = db_tmall.insert('tmall_items', **item)
-
-        print all_shop
-        print all_campaign
-        print all_item
+        select_item = db_tmall.select_one('select id from `tmall_acts` where act_url=?', act_url)
+        act_id = select_item['id'] if 'id' in select_item else 0
 
 
-#解析json 字符串，is_jsonp 出去外包括号
-def json_decode(json_str, is_jsonp=False):
-    if is_jsonp and '(' in json_str:
-        p_str = json_str[json_str.find('(') + 1:]
-        if ')' in p_str:
-            json_str = p_str[0: p_str.rfind(')')]
-    try:
-        return json.loads(json_str)
-    except ValueError:
-        return False
+        # 从会场抽取秒杀商品，模式 1
+        if response.doc('.zebra-act-ms-240x240'):
+            n = db_tmall.update_where('tmall_acts', {'has_seckill': 1, 'updated_at': datetime_now}, act_url=act_url)
+
+            seckill_data = response.doc('.zebra-act-ms-240x240').attr('data-config')
+            if seckill_data:
+                all_seckill = json.loads(seckill_data)
+                if all_seckill:
+                    for each_group in all_seckill:
+                        if 'items' in each_group:
+                            for each_item in each_group['items']:
+
+                                url_p = urlparse.urlparse('http:' + each_item['itemUrl'])
+                                query = urlparse.parse_qs(url_p.query)
+                                if 'id' in query:
+                                    itemId = query['id'][0]
+
+                                    if itemId:
+                                        print itemId
+
+                                        itemTitle = each_item['itemTitle'] if 'itemTitle' in each_item else ''
+                                        secKillTime = each_item['secKillTime'] if ('secKillTime' in each_item and each_item['secKillTime'].find(',') < 0) else 0
+                                        itemNum = each_item['itemNum'].replace(',', '') if 'itemNum' in each_item else ''
+                                        itemSecKillPrice = int(float(each_item['itemSecKillPrice'].replace(u'元', '')) * 100) if 'itemSecKillPrice' in each_item else 0
+                                        itemImg = each_item['itemImg'] if 'itemImg' in each_item else ''
+
+                                        item = {
+                                            'itemId': itemId, 
+                                            'type': 1,
+                                            'itemTitle': itemTitle, 
+                                            'secKillTime': secKillTime, 
+                                            'itemNum': itemNum, 
+                                            'itemSecKillPrice': itemSecKillPrice, 
+                                            'itemTagPrice': 0, 
+                                            'itemImg': itemImg,
+                                            'shop_id': 0, 
+                                            'act_id': act_id, 
+                                            'userId': '',
+                                            'crawled_at': 0,
+                                            'created_at': datetime_now, 
+                                            'updated_at': datetime_now,
+                                        }
+                                        n_insert = db_tmall.insert('tmall_items', **item)
+                                        if n_insert == 0:
+                                            item.pop('created_at')
+                                            n_update = db_tmall.update_where('tmall_items', item, itemId=itemId)
+
+
+
+       # 从会场抽取秒杀商品，模式 2
+        if response.doc('.zebra-time-rush .J_dynamic_data'):
+            n = db_tmall.update_where('tmall_acts', {'has_seckill': 2, 'updated_at': datetime_now}, act_url=act_url)
+
+            seckill_data = response.doc('.zebra-time-rush .J_dynamic_data').text()
+            if seckill_data:
+                all_seckill = json.loads(seckill_data)
+
+                if 'picList' in all_seckill:
+                    for each_item in all_seckill['picList']:
+                        url_p = urlparse.urlparse('http:' + each_item['itemUrl'])
+                        query = urlparse.parse_qs(url_p.query)
+                        if 'id' in query:
+                            itemId = query['id'][0]
+
+                            if itemId:
+                                print itemId
+
+                                item = {
+                                    'itemId': itemId, 
+                                    'type': 2,
+                                    'itemTitle': '', 
+                                    'secKillTime': 0, 
+                                    'itemNum': 0, 
+                                    'itemSecKillPrice': 0, 
+                                    'itemTagPrice': 0, 
+                                    'itemImg': '',
+                                    'shop_id': 0, 
+                                    'act_id': act_id, 
+                                    'userId': '',
+                                    'crawled_at': 0,
+                                    'created_at': datetime_now, 
+                                    'updated_at': datetime_now,
+                                }
+                                n_insert = db_tmall.insert('tmall_items', **item)
+                                if n_insert == 0:
+                                    item.pop('created_at')
+                                    n_update = db_tmall.update_where('tmall_items', item, itemId=itemId)
+
+
+
 

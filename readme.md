@@ -1,28 +1,59 @@
 ## Setup
 ```
-CREATE TABLE IF NOT EXISTS `tmall.tmall_act` (
-  `id_act` varchar(100) NOT NULL,
-  `has_seckill` int(11) NOT NULL DEFAULT '0',
+
+CREATE TABLE IF NOT EXISTS `tmall.tmall_acts` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `act_url` varchar(100) NOT NULL,
   `title` varchar(500) NOT NULL,
-  `created_on` datetime NOT NULL,
-  PRIMARY KEY (`id_act`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+  `has_seckill` int(11) NOT NULL DEFAULT '0',
+  `act_num` int(11) NOT NULL DEFAULT '0',
+  `campaign_num` int(11) NOT NULL DEFAULT '0',
+  `shop_num` int(11) NOT NULL DEFAULT '0',
+  `item_num` int(11) NOT NULL DEFAULT '0',
+  `crawled_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `act_url` (`act_url`)
+) ENGINE=MyISAM  DEFAULT CHARSET=utf8;
 
 
-CREATE TABLE IF NOT EXISTS `tmall.tmall_item` (
-  `itemId` varchar(255) NOT NULL,
-  `itemTitle` varchar(255) NOT NULL,
-  `secKillTime` datetime NOT NULL,
-  `itemNum` int(11) NOT NULL,
-  `itemSecKillPrice` float NOT NULL,
-  `itemTagPrice` float NOT NULL,
-  `id_act` varchar(100) NOT NULL,
-  `brandLogo` varchar(1000) NOT NULL,
+CREATE TABLE IF NOT EXISTS `tmall.tmall_items` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `itemId` varchar(20) NOT NULL,
+  `type` int(11) NOT NULL DEFAULT '0',
+  `noItem` int(11) NOT NULL DEFAULT '0',
+  `auctionStatus` int(11) NOT NULL DEFAULT '0',
+  `itemNum` int(11) NOT NULL DEFAULT '0',
+  `itemSecKillPrice` int(11) NOT NULL DEFAULT '0',
+  `itemTagPrice` int(11) NOT NULL DEFAULT '0',
+  `shop_id` int(11) NOT NULL DEFAULT '0',
+  `act_id` int(11) NOT NULL DEFAULT '0',
+  `userId` varchar(20) NOT NULL,
+  `itemTitle` varchar(500) NOT NULL,
   `itemImg` varchar(1000) NOT NULL,
-  `created_on` datetime NOT NULL,
-  PRIMARY KEY (`itemId`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+  `json_text` text NOT NULL,
+  `startTime` timestamp NULL DEFAULT NULL,
+  `secKillTime` timestamp NULL DEFAULT NULL,
+  `crawled_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `itemId` (`itemId`)
+) ENGINE=MyISAM  DEFAULT CHARSET=utf8;
+
 ```
+
+```
+cd ~
+git clone https://github.com/laoyuan/wanggoumiji.git
+cd wanggoumiji/pyspider
+pip install pyspider
+pyspider
+```
+
+visit: http://localhost:5000/
+make `tmall_seckill` and `tmall_miao` running
 
 ## Devlog
 
@@ -30,11 +61,12 @@ CREATE TABLE IF NOT EXISTS `tmall.tmall_item` (
 ```
 cd ~
 
+pip install pyspider
+
 brew install python
-sudo pip install --upgrade pip
-sudo pip install pyspider
-sudo pip install --allow-all-external mysql-connector-python
-sudo pip install --allow-external mysql-connector-python mysql-connector-python
+pip install --upgrade pip
+pip install pyspider
+pip install --allow-all-external mysql-connector-python
 
 # 安装 mysql.connector，pip 不支持了
 git clone https://github.com/mysql/mysql-connector-python.git
