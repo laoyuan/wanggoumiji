@@ -52,8 +52,11 @@ pip install pyspider
 pyspider
 ```
 
-visit: http://localhost:5000/
+edit `db_tmall.py` to connect to your database
+
+visit: `http://localhost:5000/`
 make `tmall_seckill` and `tmall_miao` running
+
 
 ## Devlog
 
